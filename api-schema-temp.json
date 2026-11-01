@@ -1,0 +1,562 @@
+{
+    "openapi":  "3.1.0",
+    "info":  {
+                 "title":  "FoodRescue API",
+                 "description":  "API for connecting surplus food with people and organizations.",
+                 "version":  "0.1.0"
+             },
+    "paths":  {
+                  "/":  {
+                            "get":  {
+                                        "summary":  "Home",
+                                        "operationId":  "home__get",
+                                        "responses":  {
+                                                          "200":  {
+                                                                      "description":  "Successful Response",
+                                                                      "content":  {
+                                                                                      "application/json":  {
+                                                                                                               "schema":  {
+
+                                                                                                                          }
+                                                                                                           }
+                                                                                  }
+                                                                  }
+                                                      }
+                                    }
+                        },
+                  "/health":  {
+                                  "get":  {
+                                              "summary":  "Health",
+                                              "operationId":  "health_health_get",
+                                              "responses":  {
+                                                                "200":  {
+                                                                            "description":  "Successful Response",
+                                                                            "content":  {
+                                                                                            "application/json":  {
+                                                                                                                     "schema":  {
+
+                                                                                                                                }
+                                                                                                                 }
+                                                                                        }
+                                                                        }
+                                                            }
+                                          }
+                              },
+                  "/health/db":  {
+                                     "get":  {
+                                                 "summary":  "Database Health",
+                                                 "operationId":  "database_health_health_db_get",
+                                                 "responses":  {
+                                                                   "200":  {
+                                                                               "description":  "Successful Response",
+                                                                               "content":  {
+                                                                                               "application/json":  {
+                                                                                                                        "schema":  {
+
+                                                                                                                                   }
+                                                                                                                    }
+                                                                                           }
+                                                                           }
+                                                               }
+                                             }
+                                 },
+                  "/users/register":  {
+                                          "post":  {
+                                                       "summary":  "Register User",
+                                                       "operationId":  "register_user_users_register_post",
+                                                       "requestBody":  {
+                                                                           "content":  {
+                                                                                           "application/json":  {
+                                                                                                                    "schema":  {
+                                                                                                                                   "$ref":  "#/components/schemas/UserCreate"
+                                                                                                                               }
+                                                                                                                }
+                                                                                       },
+                                                                           "required":  true
+                                                                       },
+                                                       "responses":  {
+                                                                         "201":  {
+                                                                                     "description":  "Successful Response",
+                                                                                     "content":  {
+                                                                                                     "application/json":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "$ref":  "#/components/schemas/UserResponse"
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                 }
+                                                                                 },
+                                                                         "422":  {
+                                                                                     "description":  "Validation Error",
+                                                                                     "content":  {
+                                                                                                     "application/json":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                 }
+                                                                                 }
+                                                                     }
+                                                   }
+                                      },
+                  "/users/login":  {
+                                       "post":  {
+                                                    "summary":  "Login User",
+                                                    "operationId":  "login_user_users_login_post",
+                                                    "requestBody":  {
+                                                                        "content":  {
+                                                                                        "application/json":  {
+                                                                                                                 "schema":  {
+                                                                                                                                "$ref":  "#/components/schemas/UserLogin"
+                                                                                                                            }
+                                                                                                             }
+                                                                                    },
+                                                                        "required":  true
+                                                                    },
+                                                    "responses":  {
+                                                                      "200":  {
+                                                                                  "description":  "Successful Response",
+                                                                                  "content":  {
+                                                                                                  "application/json":  {
+                                                                                                                           "schema":  {
+                                                                                                                                          "$ref":  "#/components/schemas/TokenResponse"
+                                                                                                                                      }
+                                                                                                                       }
+                                                                                              }
+                                                                              },
+                                                                      "422":  {
+                                                                                  "description":  "Validation Error",
+                                                                                  "content":  {
+                                                                                                  "application/json":  {
+                                                                                                                           "schema":  {
+                                                                                                                                          "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                      }
+                                                                                                                       }
+                                                                                              }
+                                                                              }
+                                                                  }
+                                                }
+                                   },
+                  "/users/me":  {
+                                    "get":  {
+                                                "summary":  "Read Current User",
+                                                "operationId":  "read_current_user_users_me_get",
+                                                "responses":  {
+                                                                  "200":  {
+                                                                              "description":  "Successful Response",
+                                                                              "content":  {
+                                                                                              "application/json":  {
+                                                                                                                       "schema":  {
+                                                                                                                                      "$ref":  "#/components/schemas/UserResponse"
+                                                                                                                                  }
+                                                                                                                   }
+                                                                                          }
+                                                                          }
+                                                              },
+                                                "security":  [
+                                                                 {
+                                                                     "HTTPBearer":  [
+
+                                                                                    ]
+                                                                 }
+                                                             ]
+                                            }
+                                },
+                  "/food-listings":  {
+                                         "get":  {
+                                                     "summary":  "List Food Listings",
+                                                     "operationId":  "list_food_listings_food_listings_get",
+                                                     "responses":  {
+                                                                       "200":  {
+                                                                                   "description":  "Successful Response",
+                                                                                   "content":  {
+                                                                                                   "application/json":  {
+                                                                                                                            "schema":  {
+                                                                                                                                           "items":  {
+                                                                                                                                                         "$ref":  "#/components/schemas/FoodListingResponse"
+                                                                                                                                                     },
+                                                                                                                                           "type":  "array",
+                                                                                                                                           "title":  "Response List Food Listings Food Listings Get"
+                                                                                                                                       }
+                                                                                                                        }
+                                                                                               }
+                                                                               }
+                                                                   }
+                                                 },
+                                         "post":  {
+                                                      "summary":  "Create Food Listing",
+                                                      "operationId":  "create_food_listing_food_listings_post",
+                                                      "requestBody":  {
+                                                                          "content":  {
+                                                                                          "application/json":  {
+                                                                                                                   "schema":  {
+                                                                                                                                  "$ref":  "#/components/schemas/FoodListingCreate"
+                                                                                                                              }
+                                                                                                               }
+                                                                                      },
+                                                                          "required":  true
+                                                                      },
+                                                      "responses":  {
+                                                                        "201":  {
+                                                                                    "description":  "Successful Response",
+                                                                                    "content":  {
+                                                                                                    "application/json":  {
+                                                                                                                             "schema":  {
+                                                                                                                                            "$ref":  "#/components/schemas/FoodListingResponse"
+                                                                                                                                        }
+                                                                                                                         }
+                                                                                                }
+                                                                                },
+                                                                        "422":  {
+                                                                                    "description":  "Validation Error",
+                                                                                    "content":  {
+                                                                                                    "application/json":  {
+                                                                                                                             "schema":  {
+                                                                                                                                            "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                        }
+                                                                                                                         }
+                                                                                                }
+                                                                                }
+                                                                    },
+                                                      "security":  [
+                                                                       {
+                                                                           "HTTPBearer":  [
+
+                                                                                          ]
+                                                                       }
+                                                                   ]
+                                                  }
+                                     }
+              },
+    "components":  {
+                       "schemas":  {
+                                       "FoodListingCreate":  {
+                                                                 "properties":  {
+                                                                                    "title":  {
+                                                                                                  "type":  "string",
+                                                                                                  "maxLength":  150,
+                                                                                                  "minLength":  2,
+                                                                                                  "title":  "Title"
+                                                                                              },
+                                                                                    "description":  {
+                                                                                                        "anyOf":  [
+                                                                                                                      {
+                                                                                                                          "type":  "string",
+                                                                                                                          "maxLength":  2000
+                                                                                                                      },
+                                                                                                                      {
+                                                                                                                          "type":  "null"
+                                                                                                                      }
+                                                                                                                  ],
+                                                                                                        "title":  "Description"
+                                                                                                    },
+                                                                                    "source_type":  {
+                                                                                                        "type":  "string",
+                                                                                                        "enum":  [
+                                                                                                                     "restaurant",
+                                                                                                                     "event"
+                                                                                                                 ],
+                                                                                                        "title":  "Source Type"
+                                                                                                    },
+                                                                                    "quantity":  {
+                                                                                                     "type":  "integer",
+                                                                                                     "maximum":  100000.0,
+                                                                                                     "exclusiveMinimum":  0.0,
+                                                                                                     "title":  "Quantity"
+                                                                                                 },
+                                                                                    "unit":  {
+                                                                                                 "type":  "string",
+                                                                                                 "maxLength":  30,
+                                                                                                 "minLength":  1,
+                                                                                                 "title":  "Unit"
+                                                                                             },
+                                                                                    "price_paise":  {
+                                                                                                        "type":  "integer",
+                                                                                                        "minimum":  0.0,
+                                                                                                        "title":  "Price Paise",
+                                                                                                        "default":  0
+                                                                                                    },
+                                                                                    "pickup_location":  {
+                                                                                                            "type":  "string",
+                                                                                                            "maxLength":  255,
+                                                                                                            "minLength":  3,
+                                                                                                            "title":  "Pickup Location"
+                                                                                                        },
+                                                                                    "expires_at":  {
+                                                                                                       "type":  "string",
+                                                                                                       "format":  "date-time",
+                                                                                                       "title":  "Expires At"
+                                                                                                   }
+                                                                                },
+                                                                 "type":  "object",
+                                                                 "required":  [
+                                                                                  "title",
+                                                                                  "source_type",
+                                                                                  "quantity",
+                                                                                  "unit",
+                                                                                  "pickup_location",
+                                                                                  "expires_at"
+                                                                              ],
+                                                                 "title":  "FoodListingCreate"
+                                                             },
+                                       "FoodListingResponse":  {
+                                                                   "properties":  {
+                                                                                      "id":  {
+                                                                                                 "type":  "integer",
+                                                                                                 "title":  "Id"
+                                                                                             },
+                                                                                      "title":  {
+                                                                                                    "type":  "string",
+                                                                                                    "title":  "Title"
+                                                                                                },
+                                                                                      "description":  {
+                                                                                                          "anyOf":  [
+                                                                                                                        {
+                                                                                                                            "type":  "string"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                            "type":  "null"
+                                                                                                                        }
+                                                                                                                    ],
+                                                                                                          "title":  "Description"
+                                                                                                      },
+                                                                                      "source_type":  {
+                                                                                                          "type":  "string",
+                                                                                                          "title":  "Source Type"
+                                                                                                      },
+                                                                                      "quantity":  {
+                                                                                                       "type":  "integer",
+                                                                                                       "title":  "Quantity"
+                                                                                                   },
+                                                                                      "unit":  {
+                                                                                                   "type":  "string",
+                                                                                                   "title":  "Unit"
+                                                                                               },
+                                                                                      "price_paise":  {
+                                                                                                          "type":  "integer",
+                                                                                                          "title":  "Price Paise"
+                                                                                                      },
+                                                                                      "pickup_location":  {
+                                                                                                              "type":  "string",
+                                                                                                              "title":  "Pickup Location"
+                                                                                                          },
+                                                                                      "expires_at":  {
+                                                                                                         "type":  "string",
+                                                                                                         "format":  "date-time",
+                                                                                                         "title":  "Expires At"
+                                                                                                     },
+                                                                                      "is_available":  {
+                                                                                                           "type":  "boolean",
+                                                                                                           "title":  "Is Available"
+                                                                                                       },
+                                                                                      "created_at":  {
+                                                                                                         "type":  "string",
+                                                                                                         "format":  "date-time",
+                                                                                                         "title":  "Created At"
+                                                                                                     },
+                                                                                      "creator_id":  {
+                                                                                                         "type":  "integer",
+                                                                                                         "title":  "Creator Id"
+                                                                                                     }
+                                                                                  },
+                                                                   "type":  "object",
+                                                                   "required":  [
+                                                                                    "id",
+                                                                                    "title",
+                                                                                    "description",
+                                                                                    "source_type",
+                                                                                    "quantity",
+                                                                                    "unit",
+                                                                                    "price_paise",
+                                                                                    "pickup_location",
+                                                                                    "expires_at",
+                                                                                    "is_available",
+                                                                                    "created_at",
+                                                                                    "creator_id"
+                                                                                ],
+                                                                   "title":  "FoodListingResponse"
+                                                               },
+                                       "HTTPValidationError":  {
+                                                                   "properties":  {
+                                                                                      "detail":  {
+                                                                                                     "items":  {
+                                                                                                                   "$ref":  "#/components/schemas/ValidationError"
+                                                                                                               },
+                                                                                                     "type":  "array",
+                                                                                                     "title":  "Detail"
+                                                                                                 }
+                                                                                  },
+                                                                   "type":  "object",
+                                                                   "title":  "HTTPValidationError"
+                                                               },
+                                       "TokenResponse":  {
+                                                             "properties":  {
+                                                                                "access_token":  {
+                                                                                                     "type":  "string",
+                                                                                                     "title":  "Access Token"
+                                                                                                 },
+                                                                                "token_type":  {
+                                                                                                   "type":  "string",
+                                                                                                   "title":  "Token Type",
+                                                                                                   "default":  "bearer"
+                                                                                               },
+                                                                                "expires_in":  {
+                                                                                                   "type":  "integer",
+                                                                                                   "title":  "Expires In"
+                                                                                               }
+                                                                            },
+                                                             "type":  "object",
+                                                             "required":  [
+                                                                              "access_token",
+                                                                              "expires_in"
+                                                                          ],
+                                                             "title":  "TokenResponse"
+                                                         },
+                                       "UserCreate":  {
+                                                          "properties":  {
+                                                                             "full_name":  {
+                                                                                               "type":  "string",
+                                                                                               "maxLength":  120,
+                                                                                               "minLength":  2,
+                                                                                               "title":  "Full Name"
+                                                                                           },
+                                                                             "email":  {
+                                                                                           "type":  "string",
+                                                                                           "format":  "email",
+                                                                                           "title":  "Email"
+                                                                                       },
+                                                                             "password":  {
+                                                                                              "type":  "string",
+                                                                                              "maxLength":  128,
+                                                                                              "minLength":  8,
+                                                                                              "title":  "Password"
+                                                                                          },
+                                                                             "role":  {
+                                                                                          "type":  "string",
+                                                                                          "enum":  [
+                                                                                                       "user",
+                                                                                                       "restaurant",
+                                                                                                       "ngo",
+                                                                                                       "school",
+                                                                                                       "agent"
+                                                                                                   ],
+                                                                                          "title":  "Role"
+                                                                                      }
+                                                                         },
+                                                          "type":  "object",
+                                                          "required":  [
+                                                                           "full_name",
+                                                                           "email",
+                                                                           "password",
+                                                                           "role"
+                                                                       ],
+                                                          "title":  "UserCreate"
+                                                      },
+                                       "UserLogin":  {
+                                                         "properties":  {
+                                                                            "email":  {
+                                                                                          "type":  "string",
+                                                                                          "format":  "email",
+                                                                                          "title":  "Email"
+                                                                                      },
+                                                                            "password":  {
+                                                                                             "type":  "string",
+                                                                                             "maxLength":  128,
+                                                                                             "minLength":  1,
+                                                                                             "title":  "Password"
+                                                                                         }
+                                                                        },
+                                                         "type":  "object",
+                                                         "required":  [
+                                                                          "email",
+                                                                          "password"
+                                                                      ],
+                                                         "title":  "UserLogin"
+                                                     },
+                                       "UserResponse":  {
+                                                            "properties":  {
+                                                                               "id":  {
+                                                                                          "type":  "integer",
+                                                                                          "title":  "Id"
+                                                                                      },
+                                                                               "full_name":  {
+                                                                                                 "type":  "string",
+                                                                                                 "title":  "Full Name"
+                                                                                             },
+                                                                               "email":  {
+                                                                                             "type":  "string",
+                                                                                             "format":  "email",
+                                                                                             "title":  "Email"
+                                                                                         },
+                                                                               "role":  {
+                                                                                            "type":  "string",
+                                                                                            "title":  "Role"
+                                                                                        },
+                                                                               "is_verified":  {
+                                                                                                   "type":  "boolean",
+                                                                                                   "title":  "Is Verified"
+                                                                                               },
+                                                                               "is_active":  {
+                                                                                                 "type":  "boolean",
+                                                                                                 "title":  "Is Active"
+                                                                                             }
+                                                                           },
+                                                            "type":  "object",
+                                                            "required":  [
+                                                                             "id",
+                                                                             "full_name",
+                                                                             "email",
+                                                                             "role",
+                                                                             "is_verified",
+                                                                             "is_active"
+                                                                         ],
+                                                            "title":  "UserResponse"
+                                                        },
+                                       "ValidationError":  {
+                                                               "properties":  {
+                                                                                  "loc":  {
+                                                                                              "items":  {
+                                                                                                            "anyOf":  [
+                                                                                                                          {
+                                                                                                                              "type":  "string"
+                                                                                                                          },
+                                                                                                                          {
+                                                                                                                              "type":  "integer"
+                                                                                                                          }
+                                                                                                                      ]
+                                                                                                        },
+                                                                                              "type":  "array",
+                                                                                              "title":  "Location"
+                                                                                          },
+                                                                                  "msg":  {
+                                                                                              "type":  "string",
+                                                                                              "title":  "Message"
+                                                                                          },
+                                                                                  "type":  {
+                                                                                               "type":  "string",
+                                                                                               "title":  "Error Type"
+                                                                                           },
+                                                                                  "input":  {
+                                                                                                "title":  "Input"
+                                                                                            },
+                                                                                  "ctx":  {
+                                                                                              "type":  "object",
+                                                                                              "title":  "Context"
+                                                                                          }
+                                                                              },
+                                                               "type":  "object",
+                                                               "required":  [
+                                                                                "loc",
+                                                                                "msg",
+                                                                                "type"
+                                                                            ],
+                                                               "title":  "ValidationError"
+                                                           }
+                                   },
+                       "securitySchemes":  {
+                                               "HTTPBearer":  {
+                                                                  "type":  "http",
+                                                                  "scheme":  "bearer"
+                                                              }
+                                           }
+                   }
+}

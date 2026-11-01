@@ -8,11 +8,12 @@ os.environ["JWT_ALGORITHM"] = "HS256"
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import main
+import database
 from database import Base, get_db
 from main import app
 from models import StockClearanceListing, User
@@ -804,3 +805,291 @@ def test_restaurant_history_is_scoped_and_includes_claims(api):
         "/restaurant/donations",
         headers=customer_headers,
     ).status_code == 403
+
+
+def test_pickup_delivery_locations_routes_and_tracking_are_authorized(api, monkeypatch):
+    client, session_factory = api
+    _, restaurant_headers = create_account(
+        session_factory, "map-restaurant@example.com", "restaurant"
+    )
+    ngo_id, ngo_headers = create_account(
+        session_factory, "map-ngo@example.com", "ngo"
+    )
+    _, other_ngo_headers = create_account(
+        session_factory, "map-other-ngo@example.com", "ngo"
+    )
+    agent_id, agent_headers = create_account(
+        session_factory, "map-agent@example.com", "agent"
+    )
+    _, other_agent_headers = create_account(
+        session_factory, "map-other-agent@example.com", "agent"
+    )
+    _, customer_headers = create_account(
+        session_factory, "map-user@example.com", "user"
+    )
+    admin_id, admin_headers = create_account(
+        session_factory, "map-admin@example.com", "admin"
+    )
+    donation = client.post(
+        "/food-listings",
+        headers=restaurant_headers,
+        json={
+            "title": "Map test donation",
+            "source_type": "restaurant",
+            "quantity": 10,
+            "unit": "meals",
+            "pickup_location": "Pickup address",
+            "pickup_latitude": 12.9716,
+            "pickup_longitude": 77.5946,
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat(),
+        },
+    )
+    assert donation.status_code == 201, donation.text
+    listing_id = donation.json()["id"]
+    assert donation.json()["pickup_latitude"] == pytest.approx(12.9716)
+    updated_pickup = client.put(
+        f"/restaurant/donations/{listing_id}/pickup-location",
+        headers=restaurant_headers,
+        json={"address": "Pickup address", "latitude": 12.9717, "longitude": 77.5947},
+    )
+    assert updated_pickup.status_code == 200
+    assert updated_pickup.json()["pickup"]["longitude"] == pytest.approx(77.5947)
+    assert client.put(
+        f"/restaurant/donations/{listing_id}/pickup-location",
+        headers=customer_headers,
+        json={"address": "Unauthorized", "latitude": 12.9, "longitude": 77.5},
+    ).status_code == 403
+    assert client.put(
+        f"/restaurant/donations/{listing_id}/pickup-location",
+        headers=restaurant_headers,
+        json={"address": "Invalid", "latitude": 91, "longitude": 77},
+    ).status_code == 422
+
+    claim = client.post(
+        f"/food-listings/{listing_id}/claim",
+        headers=ngo_headers,
+    )
+    assert claim.status_code == 201
+    claim_id = claim.json()["id"]
+    assert client.put(
+        f"/ngo/claims/{claim_id}/delivery-location",
+        headers=other_ngo_headers,
+        json={"address": "Delivery address", "latitude": 13.0, "longitude": 77.6},
+    ).status_code == 404
+    delivery = client.put(
+        f"/ngo/claims/{claim_id}/delivery-location",
+        headers=ngo_headers,
+        json={"address": "  Delivery address  ", "latitude": 13.0, "longitude": 77.6},
+    )
+    assert delivery.status_code == 200
+    assert delivery.json()["delivery"]["address"] == "Delivery address"
+    open_tasks = client.get(
+        "/volunteer/tasks/search?scope=available",
+        headers=agent_headers,
+    )
+    assert open_tasks.status_code == 200
+    assert open_tasks.json()["items"][0]["delivery_address"] is None
+    restaurant_claims = client.get("/restaurant/claims", headers=restaurant_headers)
+    assert restaurant_claims.status_code == 200
+    assert restaurant_claims.json()["items"][0]["delivery_latitude"] is None
+    assert client.get(
+        f"/ngo/claims/{claim_id}/route",
+        headers=customer_headers,
+    ).status_code == 403
+
+    def fake_route(url):
+        assert "/route/v1/driving/77.5947,12.9717;77.6,13.0" in url
+        return {
+            "code": "Ok",
+            "routes": [
+                {
+                    "distance": 9000,
+                    "duration": 1200,
+                    "geometry": {"coordinates": [[77.5947, 12.9717], [77.6, 13.0]]},
+                },
+                {
+                    "distance": 8000,
+                    "duration": 1500,
+                    "geometry": {"coordinates": [[77.5947, 12.9717], [77.6, 13.0]]},
+                },
+            ],
+        }
+
+    monkeypatch.setattr(main, "_fetch_json", fake_route)
+    route = client.get(f"/ngo/claims/{claim_id}/route", headers=ngo_headers)
+    assert route.status_code == 200, route.text
+    assert route.json()["routes"][0]["distance_km"] == 9
+    assert route.json()["routes"][0]["duration_minutes"] == 20
+    assert route.json()["fastest_route_id"] == 0
+    assert route.json()["shortest_distance_route_id"] == 1
+
+    accepted = client.post(
+        f"/volunteer/tasks/{claim_id}/accept",
+        headers=agent_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["listing"]["pickup_latitude"] == pytest.approx(12.9717)
+    assert client.post(
+        f"/volunteer/tasks/{claim_id}/location",
+        headers=other_agent_headers,
+        json={"latitude": 12.98, "longitude": 77.59},
+    ).status_code == 404
+    shared = client.post(
+        f"/volunteer/tasks/{claim_id}/location",
+        headers=agent_headers,
+        json={"latitude": 12.98, "longitude": 77.59},
+    )
+    assert shared.status_code == 200
+    live_location = client.get(
+        f"/ngo/claims/{claim_id}/volunteer-location",
+        headers=ngo_headers,
+    )
+    assert live_location.status_code == 200
+    assert live_location.json()["volunteer"]["longitude"] == pytest.approx(77.59)
+    assert client.get(
+        f"/ngo/claims/{claim_id}/volunteer-location",
+        headers=other_ngo_headers,
+    ).status_code == 403
+    route_with_volunteer = client.get(
+        f"/ngo/claims/{claim_id}/route",
+        headers=ngo_headers,
+    )
+    assert route_with_volunteer.json()["volunteer"]["latitude"] == pytest.approx(12.98)
+    assert client.delete(
+        f"/volunteer/tasks/{claim_id}/location",
+        headers=agent_headers,
+    ).status_code == 204
+    assert client.get(
+        f"/ngo/claims/{claim_id}/route",
+        headers=ngo_headers,
+    ).json()["volunteer"] is None
+    assert client.post(
+        f"/volunteer/tasks/{claim_id}/location",
+        headers=agent_headers,
+        json={"latitude": 12.98, "longitude": 77.59},
+    ).status_code == 200
+    assert client.post(
+        f"/volunteer/tasks/{claim_id}/collect",
+        headers=agent_headers,
+    ).status_code == 200
+    assert client.post(
+        f"/volunteer/tasks/{claim_id}/deliver",
+        headers=agent_headers,
+    ).json()["status"] == "delivered"
+    assert client.get(
+        f"/ngo/claims/{claim_id}/route",
+        headers=ngo_headers,
+    ).json()["volunteer"] is None
+    assert client.get("/admin/map-locations", headers=customer_headers).status_code == 403
+    admin_locations = client.get("/admin/map-locations", headers=admin_headers)
+    assert admin_locations.status_code == 200
+    assert admin_locations.json()["items"][0]["claim_id"] == claim_id
+
+
+def test_map_route_fails_clearly_without_coordinates_or_route(api, monkeypatch):
+    client, session_factory = api
+    _, restaurant_headers = create_account(
+        session_factory, "missing-map-restaurant@example.com", "restaurant"
+    )
+    _, ngo_headers = create_account(
+        session_factory, "missing-map-ngo@example.com", "ngo"
+    )
+    donation = client.post(
+        "/food-listings",
+        headers=restaurant_headers,
+        json={
+            "title": "No coordinates donation",
+            "source_type": "restaurant",
+            "quantity": 2,
+            "unit": "meals",
+            "pickup_location": "Pickup address",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat(),
+        },
+    )
+    claim = client.post(
+        f"/food-listings/{donation.json()['id']}/claim",
+        headers=ngo_headers,
+    )
+    assert claim.status_code == 201
+    assert client.get(
+        f"/ngo/claims/{claim.json()['id']}/route",
+        headers=ngo_headers,
+    ).status_code == 409
+    monkeypatch.setattr(
+        main,
+        "GEOCODING_BASE_URL",
+        "",
+    )
+    assert client.get(
+        "/locations/geocode?address=Some%20address",
+        headers=ngo_headers,
+    ).status_code == 503
+
+
+def test_route_provider_no_route_is_reported(api, monkeypatch):
+    client, session_factory = api
+    _, restaurant_headers = create_account(
+        session_factory, "no-route-restaurant@example.com", "restaurant"
+    )
+    _, ngo_headers = create_account(
+        session_factory, "no-route-ngo@example.com", "ngo"
+    )
+    donation = client.post(
+        "/food-listings",
+        headers=restaurant_headers,
+        json={
+            "title": "No road route donation",
+            "source_type": "restaurant",
+            "quantity": 2,
+            "unit": "meals",
+            "pickup_location": "Pickup address",
+            "pickup_latitude": 12.9,
+            "pickup_longitude": 77.5,
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat(),
+        },
+    )
+    claim = client.post(
+        f"/food-listings/{donation.json()['id']}/claim",
+        headers=ngo_headers,
+    )
+    assert client.put(
+        f"/ngo/claims/{claim.json()['id']}/delivery-location",
+        headers=ngo_headers,
+        json={"address": "Delivery address", "latitude": 13.0, "longitude": 77.6},
+    ).status_code == 200
+    monkeypatch.setattr(main, "_fetch_json", lambda _url: {"code": "NoRoute", "routes": []})
+    route = client.get(f"/ngo/claims/{claim.json()['id']}/route", headers=ngo_headers)
+    assert route.status_code == 404
+    assert route.json()["detail"] == "No road route is available between these locations."
+
+
+def test_location_schema_upgrade_is_additive_and_preserves_rows(monkeypatch):
+    legacy_engine = create_engine("sqlite://")
+    with legacy_engine.begin() as connection:
+        connection.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY)"))
+        connection.execute(text("CREATE TABLE food_listings (id INTEGER PRIMARY KEY)"))
+        connection.execute(text("CREATE TABLE food_claims (id INTEGER PRIMARY KEY)"))
+        connection.execute(text("CREATE TABLE admin_audit_logs (id INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO food_listings (id) VALUES (47)"))
+        connection.execute(text("INSERT INTO food_claims (id) VALUES (73)"))
+
+    monkeypatch.setattr(database, "engine", legacy_engine)
+    try:
+        database.initialize_database()
+        inspector = inspect(legacy_engine)
+        listing_columns = {column["name"] for column in inspector.get_columns("food_listings")}
+        claim_columns = {column["name"] for column in inspector.get_columns("food_claims")}
+        assert {"pickup_latitude", "pickup_longitude"} <= listing_columns
+        assert {
+            "delivery_address",
+            "delivery_latitude",
+            "delivery_longitude",
+            "volunteer_latitude",
+            "volunteer_longitude",
+            "volunteer_location_updated_at",
+        } <= claim_columns
+        with legacy_engine.connect() as connection:
+            assert connection.execute(text("SELECT id FROM food_listings")).scalar_one() == 47
+            assert connection.execute(text("SELECT id FROM food_claims")).scalar_one() == 73
+    finally:
+        legacy_engine.dispose()

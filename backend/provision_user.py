@@ -4,7 +4,7 @@ import sys
 
 from pwdlib import PasswordHash
 from pydantic import EmailStr, TypeAdapter
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,7 +34,9 @@ def provision_user(
         normalized_email = str(TypeAdapter(EmailStr).validate_python(email.strip())).lower()
     except ValueError as error:
         raise ValueError("A valid email address is required.") from error
-    existing_user = db.query(User).filter(User.email == normalized_email).first()
+    existing_user = db.query(User).filter(
+        func.lower(User.email) == normalized_email
+    ).first()
     if existing_user:
         raise ValueError("An account with this email already exists.")
 

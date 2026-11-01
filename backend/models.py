@@ -9,6 +9,7 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    Float,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -45,6 +46,8 @@ class FoodListing(Base):
     unit: Mapped[str] = mapped_column(String(30), nullable=False)
     price_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     pickup_location: Mapped[str] = mapped_column(String(255), nullable=False)
+    pickup_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pickup_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -102,6 +105,15 @@ class FoodClaim(Base):
     )
 
     delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    delivery_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    delivery_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volunteer_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volunteer_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volunteer_location_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

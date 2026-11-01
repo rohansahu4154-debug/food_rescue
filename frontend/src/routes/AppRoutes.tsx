@@ -23,6 +23,7 @@ import {
   AdminDashboard,
   AdminDeliveriesPage,
   AdminFoodListingsPage,
+  AdminMapLocationsPage,
   AdminReportsPage,
   AdminStockClearancePage,
   AdminUserDetailPage,
@@ -91,6 +92,7 @@ export function AppRoutes() {
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/users/:userId" element={<AdminUserDetailPage />} />
           <Route path="/admin/listings" element={<AdminFoodListingsPage />} />
+          <Route path="/admin/map-locations" element={<AdminMapLocationsPage />} />
           <Route path="/admin/stock-clearance" element={<AdminStockClearancePage />} />
           <Route path="/admin/claims" element={<AdminClaimsPage />} />
           <Route path="/admin/deliveries" element={<AdminDeliveriesPage />} />

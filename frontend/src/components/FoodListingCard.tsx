@@ -1,5 +1,6 @@
 import { ArrowRight, Clock3, MapPin, PackageCheck, UtensilsCrossed } from 'lucide-react'
 import { useAppContext } from '../context/AppContext'
+import { LocationMapPreview } from './DeliveryMap'
 import type { FoodListing } from '../types'
 
 export function FoodListingCard({
@@ -30,6 +31,11 @@ export function FoodListingCard({
           <p><MapPin aria-hidden="true" size={16} /><span><strong>{listing.pickup_location}</strong><small>Pickup location</small></span></p>
           <p><Clock3 aria-hidden="true" size={16} /><span><strong>{new Date(listing.expires_at).toLocaleString()}</strong><small>Food expiry · pickup time not provided</small></span></p>
         </div>
+        {listing.pickup_latitude != null && listing.pickup_longitude != null ? <LocationMapPreview pickup={{
+          address: listing.pickup_location,
+          latitude: listing.pickup_latitude,
+          longitude: listing.pickup_longitude,
+        }} /> : null}
         <div className="food-card-bottom">
           <span className="food-price">{listing.price_paise === 0 ? 'Free' : `₹${(listing.price_paise / 100).toFixed(2)}`}</span>
           {canClaim ? (

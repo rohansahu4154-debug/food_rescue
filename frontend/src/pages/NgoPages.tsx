@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FoodListingCard } from '../components/FoodListingCard'
 import { DonationTracking } from '../components/DonationTracking'
+import { DeliveryRouteMap } from '../components/DeliveryMap'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../components/PagePrimitives'
 import { ResultsPagination } from '../components/ResultsPagination'
 import { useAppContext } from '../context/AppContext'
@@ -126,6 +127,7 @@ export function NgoClaimsPage() {
             <h2>Food listing #{claim.listing_id}</h2>
             <dl><div><dt>Claim ID</dt><dd>{claim.id}</dd></div><div><dt>Claimed</dt><dd>{new Date(claim.claimed_at).toLocaleString()}</dd></div><div><dt>Volunteer</dt><dd>{claim.volunteer_id ?? 'Not assigned'}</dd></div></dl>
             <DonationTracking claim={claim} />
+            {claim.status !== 'delivered' ? <DeliveryRouteMap claim={claim} editableDelivery /> : null}
             {claim.collected_at ? <p>Collected {new Date(claim.collected_at).toLocaleString()}</p> : null}
             {claim.delivered_at ? <p>Delivered {new Date(claim.delivered_at).toLocaleString()}</p> : null}
           </article>

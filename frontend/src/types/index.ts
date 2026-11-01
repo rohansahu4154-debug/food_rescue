@@ -21,6 +21,8 @@ export type FoodListing = {
   unit: string
   price_paise: number
   pickup_location: string
+  pickup_latitude: number | null
+  pickup_longitude: number | null
   expires_at: string
   is_available: boolean
   created_at: string
@@ -36,6 +38,12 @@ export type FoodClaim = {
   claimed_at: string
   collected_at: string | null
   delivered_at: string | null
+  delivery_address: string | null
+  delivery_latitude: number | null
+  delivery_longitude: number | null
+  volunteer_latitude: number | null
+  volunteer_longitude: number | null
+  volunteer_location_updated_at: string | null
 }
 
 export type VolunteerTask = FoodClaim & {
@@ -45,6 +53,8 @@ export type VolunteerTask = FoodClaim & {
     quantity: number
     unit: string
     pickup_location: string
+    pickup_latitude: number | null
+    pickup_longitude: number | null
     expires_at: string
   }
 }
@@ -124,6 +134,8 @@ export type DonationForm = {
   unit: string
   price_rupees: string
   pickup_location: string
+  pickup_latitude: string
+  pickup_longitude: string
   expires_at: string
 }
 

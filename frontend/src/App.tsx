@@ -41,6 +41,8 @@ function AppContent() {
     unit: 'meals',
     price_rupees: '0',
     pickup_location: '',
+    pickup_latitude: '',
+    pickup_longitude: '',
     expires_at: '',
   })
 
@@ -238,6 +240,9 @@ function AppContent() {
     setDonationError('')
     setDonationMessage('')
     try {
+      if (!donation.pickup_location.trim() || !donation.pickup_latitude || !donation.pickup_longitude) {
+        throw new Error('Enter the pickup address and select the exact pickup point on the map.')
+      }
       if (!token || currentUser?.role !== 'restaurant') {
         throw new Error('Please log in with a restaurant account.')
       }
@@ -251,6 +256,8 @@ function AppContent() {
           unit: donation.unit,
           price_paise: Math.round(Number(donation.price_rupees) * 100),
           pickup_location: donation.pickup_location.trim(),
+          pickup_latitude: donation.pickup_latitude === '' ? null : Number(donation.pickup_latitude),
+          pickup_longitude: donation.pickup_longitude === '' ? null : Number(donation.pickup_longitude),
           expires_at: new Date(donation.expires_at).toISOString(),
         }),
       }, token)
@@ -258,7 +265,8 @@ function AppContent() {
       showToast('Food donation created successfully!')
       setDonation({
         title: '', description: '', source_type: 'restaurant', quantity: '10',
-        unit: 'meals', price_rupees: '0', pickup_location: '', expires_at: '',
+        unit: 'meals', price_rupees: '0', pickup_location: '',
+        pickup_latitude: '', pickup_longitude: '', expires_at: '',
       })
       setShowDonationForm(false)
       await loadListings()

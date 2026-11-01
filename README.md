@@ -122,8 +122,8 @@ delivery, and administrative status events.
 
 The volunteer workflow separates accepting an open task from marking it
 collected and delivered. Task records expose the donation's pickup location and
-quantity. A delivery destination is not available because NGO address/profile
-data is not part of the current database model.
+quantity. After an NGO saves a delivery point on its claim, only the assigned
+volunteer can view that destination; open, unassigned tasks do not expose it.
 
 New role-focused APIs include:
 
@@ -151,6 +151,65 @@ startup migration for the audit actor field; it does not yet have a general
 versioned migration framework. For production, introduce reviewed Alembic
 migrations, configure production-only `CORS_ORIGINS` and `VITE_API_URL`, use a
 managed PostgreSQL service, and verify backups and TLS before deployment.
+
+## Pickup and delivery maps
+
+The map uses Leaflet and React Leaflet with configurable OpenStreetMap-compatible
+tiles. Donation pickup coordinates are nullable `pickup_latitude` and
+`pickup_longitude` columns on `food_listings`; recipient address/coordinates and
+the volunteer's opt-in live position are nullable fields on the existing
+`food_claims` table. Startup applies additive columns for existing databases
+without clearing existing records. Plan and test a versioned Alembic migration
+before using this startup migration in a production deployment.
+
+Restaurants select the pickup address and point on the map when creating a
+donation. NGOs select and save the delivery point on their claim. An assigned
+volunteer can explicitly start location sharing; browser permission is
+requested only after that action, updates are sent at most once every 10 seconds,
+and sharing stops (and the last location is cleared) when stopped, the task
+screen closes, or delivery completes. Recipients, the assigned volunteer, and
+Admins can see the delivery route; unassigned volunteers and donating
+restaurants do not receive recipient coordinates.
+
+Routes are requested server-side from the configurable OSRM-compatible
+`ROUTING_BASE_URL`. Road distance and travel duration come from the provider.
+The fastest returned route is distinguished from the shortest-distance route
+among alternatives actually returned; the app does not request or claim a
+shortest-route optimization. Google Maps opens separately for navigation.
+Address lookup is server-side and optional via `GEOCODING_BASE_URL`, configured
+as a Nominatim-compatible `/search` endpoint. Without it, users can enter the
+address and select the point directly on the map. Tile, geocoding, and routing
+service usage terms and limits apply.
+
+The sample OSRM URL and default OpenStreetMap tiles are for development and are
+not production service guarantees. Configure production-appropriate,
+terms-compliant tile, geocoding, and routing providers. Environment:
+
+- Backend: `ROUTING_BASE_URL`, optional `GEOCODING_BASE_URL`.
+- Frontend: `VITE_MAP_TILE_URL` (URL template with `{s}`, `{z}`, `{x}`, `{y}`).
+
+Install/start on Windows from the repository root:
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+In another terminal:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Map workflow tests mock the OSRM-compatible response and use isolated SQLite;
+they verify coordinate validation, owner/recipient/volunteer/Admin authorization,
+route metrics and alternatives, missing-route behavior, live-location sharing,
+and additive schema upgrades. They do not measure a real provider route or
+replace a production PostgreSQL migration/integration test.
 
 ## Demonstration sequence
 

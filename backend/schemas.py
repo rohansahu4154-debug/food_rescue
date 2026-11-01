@@ -1,6 +1,7 @@
 
 
 from datetime import datetime
+import math
 from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -46,7 +47,28 @@ class FoodListingCreate(BaseModel):
     unit: str = Field(min_length=1, max_length=30)
     price_paise: int = Field(default=0, ge=0)
     pickup_location: str = Field(min_length=3, max_length=255)
+    pickup_latitude: float | None = Field(default=None, ge=-90, le=90)
+    pickup_longitude: float | None = Field(default=None, ge=-180, le=180)
     expires_at: datetime
+
+    @field_validator("pickup_location")
+    @classmethod
+    def strip_pickup_address(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 3:
+            raise ValueError("Pickup location must contain at least 3 characters.")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_pickup_coordinates(self):
+        if (self.pickup_latitude is None) != (self.pickup_longitude is None):
+            raise ValueError("Both pickup coordinates must be provided together.")
+        if self.pickup_latitude is not None and self.pickup_longitude is not None and (
+            not math.isfinite(self.pickup_latitude)
+            or not math.isfinite(self.pickup_longitude)
+        ):
+            raise ValueError("Pickup coordinates must be finite numbers.")
+        return self
 
 
 class FoodListingResponse(BaseModel):
@@ -60,6 +82,8 @@ class FoodListingResponse(BaseModel):
     unit: str
     price_paise: int
     pickup_location: str
+    pickup_latitude: float | None
+    pickup_longitude: float | None
     expires_at: datetime
     is_available: bool
     created_at: datetime
@@ -76,6 +100,12 @@ class FoodClaimResponse(BaseModel):
     claimed_at: datetime
     collected_at: datetime | None
     delivered_at: datetime | None
+    delivery_address: str | None
+    delivery_latitude: float | None
+    delivery_longitude: float | None
+    volunteer_latitude: float | None
+    volunteer_longitude: float | None
+    volunteer_location_updated_at: datetime | None
 
 
 class VolunteerTaskListing(BaseModel):
@@ -84,7 +114,44 @@ class VolunteerTaskListing(BaseModel):
     quantity: int
     unit: str
     pickup_location: str
+    pickup_latitude: float | None
+    pickup_longitude: float | None
     expires_at: datetime
+
+
+class LocationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address: str = Field(min_length=3, max_length=500)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+    @field_validator("address")
+    @classmethod
+    def strip_location_address(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 3:
+            raise ValueError("Address must contain at least 3 characters.")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_finite_coordinates(self):
+        if not math.isfinite(self.latitude) or not math.isfinite(self.longitude):
+            raise ValueError("Coordinates must be finite numbers.")
+        return self
+
+
+class DeliveryLocationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+    @model_validator(mode="after")
+    def validate_finite_coordinates(self):
+        if not math.isfinite(self.latitude) or not math.isfinite(self.longitude):
+            raise ValueError("Coordinates must be finite numbers.")
+        return self
 
 
 class VolunteerTaskResponse(FoodClaimResponse):

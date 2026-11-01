@@ -1,7 +1,11 @@
-
-
 import os
+import json
+import logging
+from math import isfinite
 from datetime import datetime, timedelta, timezone
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, Query, status
@@ -29,11 +33,13 @@ from models import (
 
 from schemas import (
     FoodClaimResponse,
+    DeliveryLocationUpdate,
     FoodListingCreate,
     FoodListingResponse,
     AdminAuditLogResponse,
     AdminListingUpdate,
     AdminUserUpdate,
+    LocationUpdate,
     NotificationResponse,
     Page,
     RestaurantFoodListingResponse,
@@ -75,6 +81,175 @@ app.add_middleware(
 )
 
 password_hash = PasswordHash.recommended()
+logger = logging.getLogger(__name__)
+ROUTING_BASE_URL = os.getenv(
+    "ROUTING_BASE_URL",
+    "https://router.project-osrm.org",
+).rstrip("/")
+GEOCODING_BASE_URL = os.getenv("GEOCODING_BASE_URL", "").rstrip("/")
+
+
+def _validate_coordinates(latitude: float, longitude: float) -> None:
+    if (
+        not isfinite(latitude)
+        or not isfinite(longitude)
+        or not -90 <= latitude <= 90
+        or not -180 <= longitude <= 180
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Coordinates are outside the valid latitude/longitude range.",
+        )
+
+
+def _task_listing_response(
+    claim: FoodClaim,
+    listing: FoodListing,
+    *,
+    include_delivery_location: bool = True,
+) -> dict:
+    claim_data = FoodClaimResponse.model_validate(claim).model_dump()
+    if not include_delivery_location:
+        _redact_delivery_location(claim_data)
+    return {
+        **claim_data,
+        "listing": {
+            "id": listing.id,
+            "title": listing.title,
+            "quantity": listing.quantity,
+            "unit": listing.unit,
+            "pickup_location": listing.pickup_location,
+            "pickup_latitude": listing.pickup_latitude,
+            "pickup_longitude": listing.pickup_longitude,
+            "expires_at": listing.expires_at,
+        },
+    }
+
+
+def _redact_delivery_location(response: dict) -> dict:
+    response["delivery_address"] = None
+    response["delivery_latitude"] = None
+    response["delivery_longitude"] = None
+    response["volunteer_latitude"] = None
+    response["volunteer_longitude"] = None
+    response["volunteer_location_updated_at"] = None
+    return response
+
+
+def _claim_response_for_volunteer(claim: FoodClaim) -> dict:
+    response = FoodClaimResponse.model_validate(claim).model_dump()
+    if claim.volunteer_id is None:
+        _redact_delivery_location(response)
+    return response
+
+
+def _authorized_claim(
+    claim_id: int,
+    current_user: User,
+    db: Session,
+) -> tuple[FoodClaim, FoodListing]:
+    claim = db.get(FoodClaim, claim_id)
+    if not claim:
+        raise HTTPException(status_code=404, detail="Food claim not found.")
+    if current_user.role == "admin":
+        pass
+    elif current_user.role == "ngo" and claim.ngo_id == current_user.id:
+        pass
+    elif current_user.role == "agent" and claim.volunteer_id == current_user.id:
+        pass
+    else:
+        raise HTTPException(status_code=403, detail="You cannot view this delivery location.")
+    listing = db.get(FoodListing, claim.listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Food listing not found.")
+    return claim, listing
+
+
+def _fetch_json(url: str) -> dict | list:
+    request = Request(url, headers={"User-Agent": "FoodRescue/1.0"})
+    try:
+        with urlopen(request, timeout=10) as response:
+            data = json.loads(response.read())
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        logger.warning("Map provider request failed: %s", type(error).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The map service is unavailable. Please try again.",
+        ) from error
+    if not isinstance(data, (dict, list)):
+        raise HTTPException(status_code=502, detail="The map service returned invalid data.")
+    return data
+
+
+def _get_road_route(pickup: tuple[float, float], delivery: tuple[float, float]) -> dict:
+    for latitude, longitude in (pickup, delivery):
+        _validate_coordinates(latitude, longitude)
+    coordinates = f"{pickup[1]},{pickup[0]};{delivery[1]},{delivery[0]}"
+    query = urlencode({
+        "overview": "full",
+        "geometries": "geojson",
+        "alternatives": "true",
+        "steps": "false",
+    })
+    payload = _fetch_json(f"{ROUTING_BASE_URL}/route/v1/driving/{coordinates}?{query}")
+    if not isinstance(payload, dict) or payload.get("code") != "Ok" or not payload.get("routes"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No road route is available between these locations.",
+        )
+    provided_routes = payload["routes"]
+    if not isinstance(provided_routes, list):
+        raise HTTPException(status_code=502, detail="The routing service returned invalid alternatives.")
+    routes = []
+    for index, route in enumerate(provided_routes):
+        if not isinstance(route, dict):
+            continue
+        distance = route.get("distance")
+        duration = route.get("duration")
+        route_geometry = route.get("geometry")
+        geometry = route_geometry.get("coordinates") if isinstance(route_geometry, dict) else None
+        if (
+            not isinstance(distance, (int, float))
+            or not isfinite(distance)
+            or distance <= 0
+            or not isinstance(duration, (int, float))
+            or not isfinite(duration)
+            or duration <= 0
+            or not isinstance(geometry, list)
+            or len(geometry) < 2
+        ):
+            continue
+        if any(
+            not isinstance(point, list)
+            or len(point) != 2
+            or not all(isinstance(value, (int, float)) and isfinite(value) for value in point)
+            or not -180 <= point[0] <= 180
+            or not -90 <= point[1] <= 90
+            for point in geometry
+        ):
+            continue
+        routes.append({
+            "id": index,
+            "distance_km": round(distance / 1000, 2),
+            "duration_minutes": round(duration / 60),
+            "_distance_meters": distance,
+            "_duration_seconds": duration,
+            "geometry": geometry,
+        })
+    if not routes:
+        raise HTTPException(status_code=502, detail="The routing service returned an invalid route.")
+    fastest = min(routes, key=lambda route: route["_duration_seconds"])
+    shortest = min(routes, key=lambda route: route["_distance_meters"])
+    for route in routes:
+        route.pop("_distance_meters")
+        route.pop("_duration_seconds")
+    return {
+        "provider": "OSRM",
+        "route_optimization": "Fastest route; distance alternatives are compared only when returned by the provider.",
+        "routes": routes,
+        "fastest_route_id": fastest["id"],
+        "shortest_distance_route_id": shortest["id"] if len(routes) > 1 else None,
+    }
 
 
 def ensure_utc(value: datetime) -> datetime:
@@ -91,6 +266,35 @@ def home():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
+@app.get("/locations/geocode")
+def geocode_address(
+    address: str = Query(min_length=3, max_length=500),
+    current_user: User = Depends(get_current_user),
+):
+    if not GEOCODING_BASE_URL:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Address search is not configured. Select the location directly on the map.",
+        )
+    query = urlencode({"q": address.strip(), "format": "jsonv2", "limit": 1})
+    results = _fetch_json(f"{GEOCODING_BASE_URL}?{query}")
+    if not isinstance(results, list) or not results:
+        raise HTTPException(status_code=404, detail="No matching address was found.")
+    result = results[0]
+    try:
+        latitude = float(result["lat"])
+        longitude = float(result["lon"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HTTPException(status_code=502, detail="The geocoding service returned an invalid location.") from error
+    _validate_coordinates(latitude, longitude)
+    return {
+        "address": str(result.get("display_name", address.strip()))[:500],
+        "latitude": latitude,
+        "longitude": longitude,
+    }
+
 
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
@@ -300,6 +504,84 @@ def search_food_listings(
     return Page(items=items, total=total, limit=limit, offset=offset)
 
 
+@app.get("/food-listings/{listing_id}/locations")
+def get_donation_locations(
+    listing_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    listing = db.get(FoodListing, listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Food listing not found.")
+    has_claim = db.query(FoodClaim.id).filter(
+        FoodClaim.listing_id == listing.id,
+        FoodClaim.ngo_id == current_user.id,
+    ).first()
+    has_permission = (
+        current_user.role == "admin"
+        or listing.creator_id == current_user.id
+        or has_claim is not None
+        or db.query(FoodClaim.id).filter(
+            FoodClaim.listing_id == listing.id,
+            FoodClaim.volunteer_id == current_user.id,
+        ).first() is not None
+    )
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="You cannot view this pickup location.")
+    return {
+        "donation_id": listing.id,
+        "pickup": {
+            "address": listing.pickup_location,
+            "latitude": listing.pickup_latitude,
+            "longitude": listing.pickup_longitude,
+        },
+    }
+
+
+@app.put("/restaurant/donations/{listing_id}/pickup-location")
+def update_donation_pickup_location(
+    listing_id: int,
+    location: LocationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "restaurant":
+        raise HTTPException(status_code=403, detail="Only restaurants can update pickup locations.")
+    listing = db.query(FoodListing).filter(
+        FoodListing.id == listing_id,
+        FoodListing.creator_id == current_user.id,
+    ).with_for_update().first()
+    if not listing:
+        raise HTTPException(status_code=404, detail="Donation listing not found.")
+    existing_claim = db.query(FoodClaim.id).filter(
+        FoodClaim.listing_id == listing.id
+    ).first()
+    if existing_claim:
+        if (
+            listing.pickup_latitude is not None
+            or listing.pickup_longitude is not None
+            or location.address != listing.pickup_location
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Claimed donations may only add missing coordinates without changing their pickup address.",
+            )
+    elif not listing.is_available or ensure_utc(listing.expires_at) <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=409, detail="Only active, unclaimed listings can update pickup locations.")
+    listing.pickup_location = location.address
+    listing.pickup_latitude = location.latitude
+    listing.pickup_longitude = location.longitude
+    db.commit()
+    return {
+        "donation_id": listing.id,
+        "pickup": {
+            "address": listing.pickup_location,
+            "latitude": listing.pickup_latitude,
+            "longitude": listing.pickup_longitude,
+        },
+    }
+
+
 @app.post(
     "/food-listings/{listing_id}/claim",
     response_model=FoodClaimResponse,
@@ -430,7 +712,7 @@ def get_volunteer_tasks(
             detail="Only volunteers can view pickup tasks.",
         )
 
-    return (
+    claims = (
         db.query(FoodClaim)
         .filter(
             or_(
@@ -444,6 +726,7 @@ def get_volunteer_tasks(
         .order_by(FoodClaim.claimed_at.desc())
         .all()
     )
+    return [_claim_response_for_volunteer(claim) for claim in claims]
 
 
 @app.get("/volunteer/tasks/search", response_model=Page[VolunteerTaskResponse])
@@ -489,13 +772,15 @@ def search_volunteer_tasks(
         if listing is None:
             continue
         items.append({
-            **FoodClaimResponse.model_validate(claim).model_dump(),
+            **_claim_response_for_volunteer(claim),
             "listing": {
                 "id": listing.id,
                 "title": listing.title,
                 "quantity": listing.quantity,
                 "unit": listing.unit,
                 "pickup_location": listing.pickup_location,
+                "pickup_latitude": listing.pickup_latitude,
+                "pickup_longitude": listing.pickup_longitude,
                 "expires_at": listing.expires_at,
             },
         })
@@ -548,17 +833,11 @@ def accept_volunteer_task(
     ))
     db.commit()
     db.refresh(claim)
-    return {
-        **FoodClaimResponse.model_validate(claim).model_dump(),
-        "listing": {
-            "id": listing.id,
-            "title": listing.title,
-            "quantity": listing.quantity,
-            "unit": listing.unit,
-            "pickup_location": listing.pickup_location,
-            "expires_at": listing.expires_at,
-        },
-    }
+    return _task_listing_response(
+        claim,
+        listing,
+        include_delivery_location=claim.volunteer_id == current_user.id,
+    )
 
 
 @app.get(
@@ -592,17 +871,145 @@ def get_volunteer_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Food listing not found.",
         )
+    return _task_listing_response(
+        claim,
+        listing,
+        include_delivery_location=claim.volunteer_id == current_user.id,
+    )
+
+
+@app.put("/ngo/claims/{claim_id}/delivery-location")
+def update_claim_delivery_location(
+    claim_id: int,
+    location: LocationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "ngo":
+        raise HTTPException(status_code=403, detail="Only the claiming NGO can update the delivery location.")
+    claim = db.query(FoodClaim).filter(
+        FoodClaim.id == claim_id,
+        FoodClaim.ngo_id == current_user.id,
+    ).with_for_update().first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Food claim not found.")
+    if claim.status == "delivered":
+        raise HTTPException(status_code=409, detail="A completed delivery location cannot be changed.")
+    claim.delivery_address = location.address
+    claim.delivery_latitude = location.latitude
+    claim.delivery_longitude = location.longitude
+    db.commit()
     return {
-        **FoodClaimResponse.model_validate(claim).model_dump(),
-        "listing": {
-            "id": listing.id,
-            "title": listing.title,
-            "quantity": listing.quantity,
-            "unit": listing.unit,
-            "pickup_location": listing.pickup_location,
-            "expires_at": listing.expires_at,
+        "claim_id": claim.id,
+        "delivery": {
+            "address": claim.delivery_address,
+            "latitude": claim.delivery_latitude,
+            "longitude": claim.delivery_longitude,
         },
     }
+
+
+@app.get("/ngo/claims/{claim_id}/route")
+def get_claim_road_route(
+    claim_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    claim, listing = _authorized_claim(claim_id, current_user, db)
+    if (
+        listing.pickup_latitude is None
+        or listing.pickup_longitude is None
+        or claim.delivery_latitude is None
+        or claim.delivery_longitude is None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Pickup and delivery coordinates are both required before routing.",
+        )
+    return {
+        "claim_id": claim.id,
+        "pickup": {
+            "address": listing.pickup_location,
+            "latitude": listing.pickup_latitude,
+            "longitude": listing.pickup_longitude,
+        },
+        "delivery": {
+            "address": claim.delivery_address,
+            "latitude": claim.delivery_latitude,
+            "longitude": claim.delivery_longitude,
+        },
+        "volunteer": {
+            "latitude": claim.volunteer_latitude,
+            "longitude": claim.volunteer_longitude,
+            "updated_at": claim.volunteer_location_updated_at,
+        } if claim.volunteer_latitude is not None and claim.volunteer_longitude is not None else None,
+        **_get_road_route(
+            (listing.pickup_latitude, listing.pickup_longitude),
+            (claim.delivery_latitude, claim.delivery_longitude),
+        ),
+    }
+
+
+@app.get("/ngo/claims/{claim_id}/volunteer-location")
+def get_claim_volunteer_location(
+    claim_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    claim, _listing = _authorized_claim(claim_id, current_user, db)
+    if claim.volunteer_latitude is None or claim.volunteer_longitude is None:
+        return {"volunteer": None}
+    return {
+        "volunteer": {
+            "latitude": claim.volunteer_latitude,
+            "longitude": claim.volunteer_longitude,
+            "updated_at": claim.volunteer_location_updated_at,
+        },
+    }
+
+
+@app.post("/volunteer/tasks/{claim_id}/location")
+def update_volunteer_location(
+    claim_id: int,
+    location: DeliveryLocationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "agent":
+        raise HTTPException(status_code=403, detail="Only volunteers can share their location.")
+    claim = db.query(FoodClaim).filter(
+        FoodClaim.id == claim_id,
+        FoodClaim.volunteer_id == current_user.id,
+    ).with_for_update().first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Assigned delivery task not found.")
+    if claim.status not in {"assigned", "collected"}:
+        raise HTTPException(status_code=409, detail="Location sharing is only available during an active delivery.")
+    claim.volunteer_latitude = location.latitude
+    claim.volunteer_longitude = location.longitude
+    claim.volunteer_location_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"updated_at": claim.volunteer_location_updated_at}
+
+
+@app.delete("/volunteer/tasks/{claim_id}/location", status_code=status.HTTP_204_NO_CONTENT)
+def stop_volunteer_location_sharing(
+    claim_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "agent":
+        raise HTTPException(status_code=403, detail="Only volunteers can manage location sharing.")
+    claim = db.query(FoodClaim).filter(
+        FoodClaim.id == claim_id,
+        FoodClaim.volunteer_id == current_user.id,
+    ).with_for_update().first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Assigned delivery task not found.")
+    claim.volunteer_latitude = None
+    claim.volunteer_longitude = None
+    claim.volunteer_location_updated_at = None
+    db.commit()
 
 
 @app.post(
@@ -702,6 +1109,9 @@ def deliver_food(
 
     claim.status = "delivered"
     claim.delivered_at = datetime.now(timezone.utc)
+    claim.volunteer_latitude = None
+    claim.volunteer_longitude = None
+    claim.volunteer_location_updated_at = None
 
     db.add(Notification(
         user_id=claim.ngo_id,
@@ -1206,7 +1616,11 @@ def edit_restaurant_donation(
             status_code=status.HTTP_409_CONFLICT,
             detail="Only active, unclaimed donation listings can be edited.",
         )
-    for field, value in changes.model_dump(exclude_unset=True).items():
+    changed_fields = changes.model_dump(exclude_unset=True)
+    if "pickup_location" in changed_fields and changed_fields["pickup_location"] != listing.pickup_location:
+        listing.pickup_latitude = None
+        listing.pickup_longitude = None
+    for field, value in changed_fields.items():
         setattr(listing, field, value)
     db.commit()
     db.refresh(listing)
@@ -1363,7 +1777,11 @@ def restaurant_claim_history(
         query = query.filter(FoodClaim.status == status_filter)
     total = query.count()
     claims = query.order_by(FoodClaim.claimed_at.desc()).offset(offset).limit(limit).all()
-    return Page(items=claims, total=total, limit=limit, offset=offset)
+    items = [
+        _redact_delivery_location(FoodClaimResponse.model_validate(claim).model_dump())
+        for claim in claims
+    ]
+    return Page(items=items, total=total, limit=limit, offset=offset)
 
 
 @app.get(
@@ -1654,6 +2072,49 @@ def admin_list_food_listings(
     }[sort]
     total = query.count()
     items = query.order_by(order_column).offset(offset).limit(limit).all()
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@app.get("/admin/map-locations")
+def admin_map_locations(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    admin: User = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(FoodListing, FoodClaim)
+        .outerjoin(FoodClaim, FoodClaim.listing_id == FoodListing.id)
+        .filter(
+            (FoodListing.pickup_latitude.is_not(None))
+            & (FoodListing.pickup_longitude.is_not(None))
+        )
+    )
+    total = query.count()
+    rows = query.order_by(FoodListing.created_at.desc()).offset(offset).limit(limit).all()
+    items = []
+    for listing, claim in rows:
+        items.append({
+            "listing_id": listing.id,
+            "claim_id": claim.id if claim else None,
+            "title": listing.title,
+            "status": claim.status if claim else ("available" if listing.is_available else "unavailable"),
+            "pickup": {
+                "address": listing.pickup_location,
+                "latitude": listing.pickup_latitude,
+                "longitude": listing.pickup_longitude,
+            },
+            "delivery": {
+                "address": claim.delivery_address,
+                "latitude": claim.delivery_latitude,
+                "longitude": claim.delivery_longitude,
+            } if claim and claim.delivery_latitude is not None and claim.delivery_longitude is not None else None,
+            "volunteer": {
+                "latitude": claim.volunteer_latitude,
+                "longitude": claim.volunteer_longitude,
+                "updated_at": claim.volunteer_location_updated_at,
+            } if claim and claim.volunteer_latitude is not None and claim.volunteer_longitude is not None else None,
+        })
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 

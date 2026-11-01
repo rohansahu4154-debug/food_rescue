@@ -177,6 +177,32 @@ def test_privileged_provisioning_is_server_side_and_admin_bootstrap_is_one_time(
             )
 
 
+def test_privileged_provisioning_rejects_case_insensitive_existing_email(api):
+    from provision_user import provision_user
+
+    _, session_factory = api
+    with session_factory() as db:
+        db.add(User(
+            full_name="Legacy Account",
+            email="Legacy@example.com",
+            password_hash="existing-hash",
+            role="restaurant",
+            is_verified=True,
+            is_active=True,
+        ))
+        db.commit()
+
+    with session_factory() as db:
+        with pytest.raises(ValueError, match="already exists"):
+            provision_user(
+                db,
+                full_name="Duplicate Account",
+                email="legacy@example.com",
+                password="secure-password",
+                role="ngo",
+            )
+
+
 def test_profile_requires_a_valid_bearer_token(api):
     client, _ = api
     register_user(client)

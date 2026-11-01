@@ -2765,3 +2765,197 @@ select:focus-visible {
     right: 0.75rem;
   }
 }
+
+.map-location-picker,
+.delivery-route-panel {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0.75rem 0;
+}
+
+.map-location-picker > label,
+.delivery-route-panel > label,
+.route-summary > label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--forest);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.map-location-picker input,
+.delivery-route-panel input,
+.route-summary select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  padding: 0.65rem 0.75rem;
+  color: var(--ink);
+}
+
+.delivery-map {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  height: clamp(300px, 48vw, 520px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #e7eee8;
+  box-shadow: 0 8px 24px rgba(23, 76, 53, 0.1);
+}
+
+.delivery-map-canvas {
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.map-legend {
+  position: absolute;
+  z-index: 500;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.8rem;
+  width: fit-content;
+  max-width: calc(100% - 1.5rem);
+  border: 1px solid rgba(30, 65, 45, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 0.45rem 0.6rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.map-legend i {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.map-legend-pickup {
+  background: #17834b;
+}
+
+.map-legend-delivery {
+  background: #d64242;
+}
+
+.map-legend-route {
+  width: 0.8rem !important;
+  height: 3px !important;
+  border-radius: 0 !important;
+  background: #2878c8;
+}
+
+.map-legend-volunteer {
+  background: #6941c6;
+}
+
+.map-action-control {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.3rem;
+}
+
+.map-action-control button {
+  border: 0;
+  border-radius: 5px;
+  background: #fff;
+  padding: 0.35rem 0.5rem;
+  color: var(--forest);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.map-action-control button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.food-listing-card .delivery-map {
+  height: 260px;
+  margin-top: 1rem;
+}
+
+.map-pin {
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  transform: rotate(-45deg);
+}
+
+.map-pin span {
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 5px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.map-pin-pickup {
+  background: #17834b;
+}
+
+.map-pin-delivery {
+  background: #d64242;
+}
+
+.map-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.map-error {
+  margin: 0;
+  border-radius: 8px;
+  background: #fff1ef;
+  padding: 0.65rem;
+  color: #a53d34;
+}
+
+.route-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--sage);
+  padding: 0.75rem;
+}
+
+.route-summary > p {
+  margin: 0;
+}
+
+.map-directions {
+  justify-self: start;
+}
+
+@media (max-width: 640px) {
+  .delivery-map {
+    height: 340px;
+  }
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Check, Search, ShieldCheck, X } from 'lucide-react'
+import { LocationMapPreview } from '../components/DeliveryMap'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../components/PagePrimitives'
 import { useAppContext } from '../context/AppContext'
 import { apiRequest } from '../services/api'
@@ -19,6 +20,16 @@ type Resource<T> = {
   loading: boolean
   error: string
   reload: () => Promise<void>
+}
+
+type AdminMapLocation = {
+  listing_id: number
+  claim_id: number | null
+  title: string
+  status: string
+  pickup: { address: string; latitude: number; longitude: number }
+  delivery: { address: string; latitude: number; longitude: number } | null
+  volunteer: { latitude: number; longitude: number; updated_at: string | null } | null
 }
 
 function useAdminResource<T>(path: string): Resource<T> {
@@ -246,6 +257,30 @@ export function AdminFoodListingsPage() {
       {data?.items.length ? <AdminTable><thead><tr><th>Food</th><th>Quantity</th><th>Pickup location</th><th>Expiry</th><th>Creator</th><th>Availability</th></tr></thead><tbody>
         {data.items.map((listing) => <tr key={listing.id}><td>{listing.title}</td><td>{listing.quantity} {listing.unit}</td><td>{listing.pickup_location}</td><td>{new Date(listing.expires_at).toLocaleString()}</td><td>{listing.creator_id}</td><td><AvailabilityToggle path={`/admin/food-listings/${listing.id}`} available={listing.is_available} reload={reload} /></td></tr>)}
       </tbody></AdminTable> : null}
+      <AdminPagination data={data} onOffset={setOffset} />
+    </>
+  )
+}
+
+export function AdminMapLocationsPage() {
+  const [offset, setOffset] = useState(0)
+  const { data, loading, error } = useAdminResource<PageResult<AdminMapLocation>>(
+    `/admin/map-locations?limit=25&offset=${offset}`,
+  )
+  return (
+    <>
+      <PageHeader eyebrow="Admin · Map" title="Donation and delivery locations" description="Authorized map view of recorded pickup and delivery points." />
+      <AdminPageState loading={loading} error={error} empty={!data?.items.length} />
+      <div className="dashboard-card-grid">
+        {data?.items.map((item) => (
+          <article className="dashboard-panel compact-listing" key={`${item.listing_id}-${item.claim_id ?? 'listing'}`}>
+            <h2>{item.title}</h2>
+            <p>Listing #{item.listing_id} · Claim {item.claim_id ?? 'not claimed'} · {item.status}</p>
+            <LocationMapPreview pickup={item.pickup} delivery={item.delivery} volunteer={item.volunteer} />
+            {item.delivery ? <p>Delivery location: {item.delivery.address}</p> : null}
+          </article>
+        ))}
+      </div>
       <AdminPagination data={data} onOffset={setOffset} />
     </>
   )

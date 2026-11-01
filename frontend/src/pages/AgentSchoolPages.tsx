@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ClipboardList, Truck } from 'lucide-react'
 import { DonationTracking } from '../components/DonationTracking'
+import { DeliveryRouteMap } from '../components/DeliveryMap'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../components/PagePrimitives'
 import { ResultsPagination } from '../components/ResultsPagination'
 import { useAppContext } from '../context/AppContext'
@@ -69,6 +70,9 @@ function TaskList({ mine }: { mine: boolean }) {
             <h3>{task.listing.title}</h3>
             <dl><div><dt>Quantity</dt><dd>{task.listing.quantity} {task.listing.unit}</dd></div><div><dt>Pickup location</dt><dd>{task.listing.pickup_location}</dd></div><div><dt>Claimed</dt><dd>{new Date(task.claimed_at).toLocaleString()}</dd></div><div><dt>Collected</dt><dd>{task.collected_at ? new Date(task.collected_at).toLocaleString() : 'Not yet'}</dd></div><div><dt>Delivered</dt><dd>{task.delivered_at ? new Date(task.delivered_at).toLocaleString() : 'Not yet'}</dd></div></dl>
             <DonationTracking claim={task} />
+            {mine && task.volunteer_id === currentUser?.id && task.status !== 'delivered'
+              ? <DeliveryRouteMap claim={task} shareLocation />
+              : null}
             {task.status === 'claimed' && task.volunteer_id === null ? (
               <button type="button" className="button button-primary" disabled={taskBusy === task.id} onClick={() => void updateTask(task.id, 'accept')}>{taskBusy === task.id ? 'Updating...' : 'Accept task'}</button>
             ) : null}

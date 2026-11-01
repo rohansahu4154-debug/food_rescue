@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { HandHeart, PackagePlus, Truck } from 'lucide-react'
+import { PickupLocationPicker } from '../components/DeliveryMap'
 import { useAppContext } from '../context/AppContext'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../components/PagePrimitives'
 import { apiRequest } from '../services/api'
@@ -23,6 +24,51 @@ type EditableListingFields = {
   title: string
   description: string | null
   pickup_location: string
+}
+
+function PickupLocationEditor({
+  listing,
+  onSaved,
+}: {
+  listing: FoodListing
+  onSaved: () => void | Promise<void>
+}) {
+  const { token } = useAppContext()
+  const [location, setLocation] = useState({
+    address: listing.pickup_location,
+    latitude: listing.pickup_latitude,
+    longitude: listing.pickup_longitude,
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function save() {
+    if (!location.address.trim() || location.latitude == null || location.longitude == null) {
+      setError('Enter the pickup address and select the exact point on the map.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await apiRequest(`/restaurant/donations/${listing.id}/pickup-location`, {
+        method: 'PUT',
+        body: JSON.stringify(location),
+      }, token)
+      await onSaved()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to save the pickup location.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="listing-edit">
+      <PickupLocationPicker value={location} onChange={setLocation} />
+      {error ? <ErrorState message={error} /> : null}
+      <button type="button" className="button button-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving pickup location...' : 'Save pickup location'}</button>
+    </div>
+  )
 }
 
 function listingStatus(isAvailable: boolean, expiresAt: string) {
@@ -277,9 +323,21 @@ export function CreateDonationPage() {
           <label>Price per unit (₹; enter 0 for free)
             <input required type="number" min="0" step="0.01" value={donation.price_rupees} onChange={(e) => setDonation({ ...donation, price_rupees: e.target.value })} />
           </label>
-          <label>Pickup location *
-            <input required minLength={3} maxLength={255} value={donation.pickup_location} onChange={(e) => setDonation({ ...donation, pickup_location: e.target.value })} placeholder="Restaurant address" />
-          </label>
+          <div className="form-span-all">
+            <PickupLocationPicker
+              value={{
+                address: donation.pickup_location,
+                latitude: donation.pickup_latitude === '' ? null : Number(donation.pickup_latitude),
+                longitude: donation.pickup_longitude === '' ? null : Number(donation.pickup_longitude),
+              }}
+              onChange={(location) => setDonation({
+                ...donation,
+                pickup_location: location.address,
+                pickup_latitude: location.latitude == null ? '' : String(location.latitude),
+                pickup_longitude: location.longitude == null ? '' : String(location.longitude),
+              })}
+            />
+          </div>
           <label className="form-span-all">Food expiry *
             <input required type="datetime-local" value={donation.expires_at} onChange={(e) => setDonation({ ...donation, expires_at: e.target.value })} />
           </label>
@@ -315,6 +373,10 @@ export function MyDonationsPage() {
             <dl><div><dt>Quantity</dt><dd>{listing.quantity} {listing.unit}</dd></div><div><dt>Pickup</dt><dd>{listing.pickup_location}</dd></div><div><dt>Expiry</dt><dd>{new Date(listing.expires_at).toLocaleString()}</dd></div></dl>
             <h3>Claims</h3>
             {listing.claims.length ? listing.claims.map((claim) => <p key={claim.id}>Claim #{claim.id} · {claim.status}</p>) : <p>No claims.</p>}
+            {(!listing.claims.length || listing.pickup_latitude == null || listing.pickup_longitude == null)
+              && listingStatus(listing.is_available, listing.expires_at) !== 'Expired'
+              ? <PickupLocationEditor listing={listing} onSaved={refresh} />
+              : null}
             {listing.is_available && listingStatus(listing.is_available, listing.expires_at) === 'Available' && !listing.claims.length
               ? <EditListingForm path={`/restaurant/donations/${listing.id}`} listing={listing} onSaved={refresh} />
               : null}

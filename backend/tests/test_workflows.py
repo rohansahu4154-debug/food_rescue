@@ -65,6 +65,44 @@ def test_health_endpoints(api):
     }
 
 
+def test_cors_preflight_allows_local_frontend_registration(api):
+    client, _ = api
+
+    response = client.options(
+        "/users/register",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert response.headers["access-control-allow-credentials"] == "true"
+    allowed_methods = response.headers["access-control-allow-methods"]
+    for method in ("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"):
+        assert method in allowed_methods
+    allowed_headers = response.headers["access-control-allow-headers"].lower()
+    assert "authorization" in allowed_headers
+    assert "content-type" in allowed_headers
+
+    registration_response = client.post(
+        "/users/register",
+        headers={"Origin": "http://localhost:5173"},
+        json={
+            "full_name": "CORS Test Person",
+            "email": "cors-test@example.com",
+            "password": "safe-password-123",
+        },
+    )
+    assert registration_response.status_code == 201
+    assert (
+        registration_response.headers["access-control-allow-origin"]
+        == "http://localhost:5173"
+    )
+
+
 def create_account(session_factory, email: str, role: str):
     with session_factory() as db:
         user = User(

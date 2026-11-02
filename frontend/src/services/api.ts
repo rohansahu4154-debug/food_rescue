@@ -1,6 +1,17 @@
-const API_URL = (
-  import.meta.env.VITE_API_URL || 'http://localhost:8000'
-).replace(/\/+$/, '')
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim()
+
+if (import.meta.env.PROD && !configuredApiUrl) {
+  throw new Error('VITE_API_URL must be configured for the production frontend.')
+}
+
+const API_URL = (configuredApiUrl || 'http://localhost:8000').replace(/\/+$/, '')
+
+if (
+  import.meta.env.PROD &&
+  ['localhost', '127.0.0.1'].includes(new URL(API_URL).hostname)
+) {
+  throw new Error('VITE_API_URL must point to the deployed API in production.')
+}
 
 export async function apiRequest<T>(
   path: string,

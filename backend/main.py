@@ -57,7 +57,17 @@ from schemas import (
 
 from fastapi.middleware.cors import CORSMiddleware
 
-initialize_database()
+logger = logging.getLogger(__name__)
+auto_initialize_database = os.getenv(
+    "AUTO_INITIALIZE_DATABASE",
+    "true",
+).strip().lower()
+if auto_initialize_database in {"1", "true", "yes", "on"}:
+    initialize_database()
+elif auto_initialize_database not in {"0", "false", "no", "off"}:
+    raise RuntimeError(
+        "AUTO_INITIALIZE_DATABASE must be a boolean value."
+    )
 
 app = FastAPI(
     title="FoodRescue API",
@@ -81,7 +91,6 @@ app.add_middleware(
 )
 
 password_hash = PasswordHash.recommended()
-logger = logging.getLogger(__name__)
 ROUTING_BASE_URL = os.getenv(
     "ROUTING_BASE_URL",
     "https://router.project-osrm.org",
@@ -318,7 +327,11 @@ def get_stats(db: Session = Depends(get_db)):
 @app.get("/health/db")
 def database_health(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1"))
-    return {"status": "connected", "database": "foodrescue"}
+    bind = db.get_bind()
+    return {
+        "status": "connected",
+        "database": bind.url.database or bind.dialect.name,
+    }
 
 
 @app.post(

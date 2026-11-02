@@ -50,6 +50,21 @@ def api():
         engine.dispose()
 
 
+def test_health_endpoints(api):
+    client, _ = api
+
+    health_response = client.get("/health")
+    assert health_response.status_code == 200
+    assert health_response.json() == {"status": "healthy"}
+
+    database_response = client.get("/health/db")
+    assert database_response.status_code == 200
+    assert database_response.json() == {
+        "status": "connected",
+        "database": "sqlite",
+    }
+
+
 def create_account(session_factory, email: str, role: str):
     with session_factory() as db:
         user = User(

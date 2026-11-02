@@ -10,3 +10,6 @@ __pycache__/
 .vscode/
 .env
 backend/.env
+# Database backups
+*.dump
+*.backup

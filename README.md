@@ -146,11 +146,27 @@ or APIs are not implemented. School accounts currently have a view-only
 placeholder dashboard. Stock Clearance has no payment processor, and delivery
 assignment remains a volunteer self-assignment of open tasks.
 
-The application currently uses SQLAlchemy `create_all` plus a safe additive
-startup migration for the audit actor field; it does not yet have a general
-versioned migration framework. For production, introduce reviewed Alembic
-migrations, configure production-only `CORS_ORIGINS` and `VITE_API_URL`, use a
-managed PostgreSQL service, and verify backups and TLS before deployment.
+The application currently uses SQLAlchemy `create_all` plus safe additive
+startup changes; it does not yet have a general versioned migration framework.
+`AUTO_INITIALIZE_DATABASE` defaults to `true` for local development. Production
+must set it to `false` and apply a reviewed schema migration before starting
+the API, so app startup does not alter a production database.
+
+## Render and Vercel deployment
+
+The root `render.yaml` defines a free Render web service for the FastAPI backend.
+Before creating it, restore and validate the application schema in Supabase.
+Set the Render variables `DATABASE_URL` (Supabase PostgreSQL URI with
+`sslmode=require`), `JWT_SECRET_KEY` (a private random value of at least 32
+bytes), and `CORS_ORIGINS` (the exact deployed Vercel origin, without a trailing
+slash). Keep automatic database initialization disabled in production.
+Render checks `/health`; verify `/health/db` after the service starts.
+
+For Vercel, set the project root directory to `frontend`. `frontend/vercel.json`
+configures the Vite build and SPA fallback. Set `VITE_API_URL` to the deployed
+Render API origin, without a trailing slash. Local development continues to use
+the localhost defaults in the `.env.example` files. Do not put database
+credentials or Supabase secret keys in frontend environment variables.
 
 ## Pickup and delivery maps
 

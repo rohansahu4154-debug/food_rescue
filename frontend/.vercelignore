@@ -1,0 +1,5 @@
+.env*
+*.dump
+*.backup
+node_modules
+dist
